@@ -1,14 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using HttpTracer;
+using Refit;
 
 namespace Shiny.WebApi
 {
     public class WebApiOptionsBuilder
     {
-        private readonly WebApiOptions webApiOptions;
+        readonly WebApiOptions webApiOptions;
 
         public WebApiOptionsBuilder(WebApiOptions webApiOptions)
         {
@@ -17,19 +20,76 @@ namespace Shiny.WebApi
 
         internal WebApiOptions WebApiOptions => this.webApiOptions;
 
+        public WebApiOptionsBuilder WithDecompressionMethods(DecompressionMethods decompressionMethods)
+        {
+            this.webApiOptions.DecompressionMethods = decompressionMethods;
+
+            return this;
+        }
+
+        /// <summary>
+        /// The <see cref="IContentSerializer"/> instance to use.
+        /// </summary>
+        public WebApiOptionsBuilder WithContentSerializer(IContentSerializer contentSerializer)
+        {
+            this.webApiOptions.RefitSettings.ContentSerializer = contentSerializer;
+
+            return this;
+        }
+
+        /// <summary>
+        /// The <see cref="IUrlParameterFormatter"/> instance to use (defaults to <see cref="DefaultUrlParameterFormatter"/>).
+        /// </summary>
+        public WebApiOptionsBuilder WithUrlParameterFormatter(IUrlParameterFormatter urlParameterFormatter)
+        {
+            this.webApiOptions.RefitSettings.UrlParameterFormatter = urlParameterFormatter;
+
+            return this;
+        }
+
+        /// <summary>
+        /// The <see cref="IFormUrlEncodedParameterFormatter"/> instance to use (defaults to <see cref="DefaultFormUrlEncodedParameterFormatter"/>).
+        /// </summary>
+        public WebApiOptionsBuilder WithFormUrlEncodedParameterFormatter(IFormUrlEncodedParameterFormatter formUrlEncodedParameterFormatter)
+        {
+            this.webApiOptions.RefitSettings.FormUrlEncodedParameterFormatter = formUrlEncodedParameterFormatter;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Supply a function to provide the Authorization header. Does not work if you supply an HttpClient instance.
+        /// </summary>
+        public WebApiOptionsBuilder WithAuthorizationHeaderFactory(Func<Task<string>> authorizationHeaderFactory)
+        {
+            this.webApiOptions.RefitSettings.AuthorizationHeaderValueGetter = authorizationHeaderFactory;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Supply a function to provide the Authorization header. Does not work if you supply an HttpClient instance.
+        /// </summary>
+        public WebApiOptionsBuilder WithAuthorizationHeaderFactory(Func<HttpRequestMessage, Task<string>> authorizationHeaderFactory)
+        {
+            this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter = authorizationHeaderFactory;
+
+            return this;
+        }
+
         public WebApiOptionsBuilder AddHttpMessageHandler<THandler>() where THandler : DelegatingHandler =>
             this.AddHttpMessageHandler(typeof(THandler));
 
         public WebApiOptionsBuilder AddHttpMessageHandler(Type httpMessageHandlerType)
         {
-            if(!typeof(DelegatingHandler).IsAssignableFrom(httpMessageHandlerType))
+            if (!typeof(DelegatingHandler).IsAssignableFrom(httpMessageHandlerType))
                 throw new ArgumentException($"Your handler class must inherit from {nameof(DelegatingHandler)} or derived");
 
-            this.webApiOptions.HttpMessageHandlerTypes.Add(httpMessageHandlerType);
+            this.webApiOptions.HttpHandlerTypes.Add(httpMessageHandlerType);
             return this;
         }
 
-        public WebApiOptionsBuilder SetHttpTracerVerbosity(HttpMessageParts verbosity)
+        public WebApiOptionsBuilder WithHttpTracerVerbosity(HttpMessageParts verbosity)
         {
             this.webApiOptions.HttpTracerVerbosity = verbosity;
 

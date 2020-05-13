@@ -7,12 +7,12 @@ namespace Shiny
 {
     public static class ServiceCollectionExtensions
     {
-        public static bool UseWebApi<TWebApi>(this IServiceCollection services, string baseUrl, DecompressionMethods decompressionMethods, Action<WebApiOptionsBuilder>? optionsAction = null)
-            => services.UseWebApi(typeof(TWebApi), baseUrl, decompressionMethods, optionsAction);
+        public static bool UseWebApi<TWebApi>(this IServiceCollection services, string baseUrl, Action<WebApiOptionsBuilder>? optionsAction = null)
+            => services.UseWebApi(typeof(TWebApi), baseUrl, optionsAction);
 
-        public static bool UseWebApi(this IServiceCollection services, Type webApiType, string baseUrl, DecompressionMethods decompressionMethods, Action<WebApiOptionsBuilder>? optionsAction = null)
+        public static bool UseWebApi(this IServiceCollection services, Type webApiType, string baseUrl, Action<WebApiOptionsBuilder>? optionsAction = null)
         {
-            services.RegisterModule(new WebApiModule(webApiType, baseUrl, decompressionMethods, optionsAction));
+            services.RegisterModule(new WebApiModule(webApiType, baseUrl, optionsAction));
 
             return true;
         }

@@ -1,0 +1,9 @@
+{
+  "solution": {
+    "path": "Shiny-All.sln",
+    "projects": [
+      "src\\Shiny.Core\\Shiny.Core.csproj",
+      "src\\Shiny.WebApi\\Shiny.WebApi.csproj"
+    ]
+  }
+}
