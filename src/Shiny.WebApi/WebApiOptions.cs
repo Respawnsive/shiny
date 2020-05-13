@@ -13,7 +13,7 @@ namespace Shiny.WebApi
             this.WebApiType = webApiType;
             this.BaseAddress = baseAddress;
             this.RefitSettings = new RefitSettings();
-            this.HttpHandlerTypes = new List<Type>();//{typeof(WebApiHttpHandler)});
+            this.DelegatingHandlerTypes = new List<Type>();
         }
 
         #region Refit
@@ -25,7 +25,7 @@ namespace Shiny.WebApi
 
         #endregion
 
-        public IList<Type> HttpHandlerTypes { get; }
+        public IList<Type> DelegatingHandlerTypes { get; }
         public HttpMessageParts HttpTracerVerbosity { get; internal set; } = HttpMessageParts.None;
     }
 }

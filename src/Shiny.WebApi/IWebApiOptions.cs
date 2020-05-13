@@ -13,7 +13,7 @@ namespace Shiny.WebApi
         Uri BaseAddress { get; }
         DecompressionMethods DecompressionMethods { get; }
         RefitSettings RefitSettings { get; }
-        IList<Type> HttpHandlerTypes { get; }
+        IList<Type> DelegatingHandlerTypes { get; }
         HttpMessageParts HttpTracerVerbosity { get; }
     }
 }

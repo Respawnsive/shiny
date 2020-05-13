@@ -23,25 +23,29 @@ namespace Shiny.WebApi
 
         public override void Register(IServiceCollection services)
         {
-            services.AddSingleton<IWebApiOptions>(this.webApiOptions);
-
             services.AddHttpClient(ForType(this.webApiOptions.WebApiType))
                 .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
                 {
-                    var httpHandlerBuilder = new HttpHandlerBuilder();
-                    foreach (var httpMessageHandlerType in this.webApiOptions.HttpHandlerTypes)
+                    var httpHandlerBuilder = new HttpHandlerBuilder(new HttpClientHandler
+                    {
+                        AutomaticDecompression = this.webApiOptions.DecompressionMethods
+                    });
+                    httpHandlerBuilder.SetHttpTracerVerbosity(this.webApiOptions.HttpTracerVerbosity);
+
+                    if (this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter != null)
+                        httpHandlerBuilder.AddHandler(new AuthenticatedParameterizedHttpClientHandler(this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter));
+
+                    foreach (var httpMessageHandlerType in this.webApiOptions.DelegatingHandlerTypes)
                     {
                         httpHandlerBuilder.AddHandler((DelegatingHandler)serviceProvider.GetRequiredService(httpMessageHandlerType));
                     }
 
-                    var httpTracerHandler = (HttpTracerHandler)httpHandlerBuilder.Build();
-                    httpTracerHandler.Verbosity = this.webApiOptions.HttpTracerVerbosity;
-                    ((HttpClientHandler)httpTracerHandler.InnerHandler).AutomaticDecompression = this.webApiOptions.DecompressionMethods;
-
-                    return httpTracerHandler;
+                    return httpHandlerBuilder.Build();
                 })
-                .AddTypedClient(this.webApiOptions.WebApiType, (client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettings))
+                .AddTypedClient(this.webApiOptions.WebApiType,(client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettings))
                 .ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
+
+
         }
 
         /// <summary>

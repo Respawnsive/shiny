@@ -60,16 +60,6 @@ namespace Shiny.WebApi
         /// <summary>
         /// Supply a function to provide the Authorization header. Does not work if you supply an HttpClient instance.
         /// </summary>
-        public WebApiOptionsBuilder WithAuthorizationHeaderFactory(Func<Task<string>> authorizationHeaderFactory)
-        {
-            this.webApiOptions.RefitSettings.AuthorizationHeaderValueGetter = authorizationHeaderFactory;
-
-            return this;
-        }
-
-        /// <summary>
-        /// Supply a function to provide the Authorization header. Does not work if you supply an HttpClient instance.
-        /// </summary>
         public WebApiOptionsBuilder WithAuthorizationHeaderFactory(Func<HttpRequestMessage, Task<string>> authorizationHeaderFactory)
         {
             this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter = authorizationHeaderFactory;
@@ -77,21 +67,22 @@ namespace Shiny.WebApi
             return this;
         }
 
-        public WebApiOptionsBuilder AddHttpMessageHandler<THandler>() where THandler : DelegatingHandler =>
-            this.AddHttpMessageHandler(typeof(THandler));
-
-        public WebApiOptionsBuilder AddHttpMessageHandler(Type httpMessageHandlerType)
-        {
-            if (!typeof(DelegatingHandler).IsAssignableFrom(httpMessageHandlerType))
-                throw new ArgumentException($"Your handler class must inherit from {nameof(DelegatingHandler)} or derived");
-
-            this.webApiOptions.HttpHandlerTypes.Add(httpMessageHandlerType);
-            return this;
-        }
-
         public WebApiOptionsBuilder WithHttpTracerVerbosity(HttpMessageParts verbosity)
         {
             this.webApiOptions.HttpTracerVerbosity = verbosity;
+
+            return this;
+        }
+
+        public WebApiOptionsBuilder AddDelegatingHandler<THandler>() where THandler : DelegatingHandler =>
+            this.AddDelegatingHandler(typeof(THandler));
+
+        public WebApiOptionsBuilder AddDelegatingHandler(Type delegatingHandlerType)
+        {
+            if (!typeof(DelegatingHandler).IsAssignableFrom(delegatingHandlerType))
+                throw new ArgumentException($"Your handler class must inherit from {nameof(DelegatingHandler)} or derived");
+
+            this.webApiOptions.DelegatingHandlerTypes.Add(delegatingHandlerType);
 
             return this;
         }
