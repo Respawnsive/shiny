@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using HttpTracer;
+using Polly;
 using Refit;
 
 namespace Shiny.WebApi
@@ -13,19 +15,14 @@ namespace Shiny.WebApi
             this.WebApiType = webApiType;
             this.BaseAddress = baseAddress;
             this.RefitSettings = new RefitSettings();
-            this.DelegatingHandlerTypes = new List<Type>();
+            this.DelegatingHandlerFactories = new List<Func<IServiceProvider, DelegatingHandler>>();
         }
-
-        #region Refit
 
         public Type WebApiType { get; }
         public Uri BaseAddress { get; }
         public DecompressionMethods DecompressionMethods { get; internal set; } = DecompressionMethods.None;
         public RefitSettings RefitSettings { get; } 
-
-        #endregion
-
-        public IList<Type> DelegatingHandlerTypes { get; }
+        public IList<Func<IServiceProvider, DelegatingHandler>> DelegatingHandlerFactories { get; }
         public HttpMessageParts HttpTracerVerbosity { get; internal set; } = HttpMessageParts.None;
     }
 }

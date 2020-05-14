@@ -5,6 +5,8 @@ using System.Net.Http;
 using System.Text;
 using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
+using Polly.Extensions.Http;
 using Refit;
 
 namespace Shiny.WebApi
@@ -26,26 +28,23 @@ namespace Shiny.WebApi
             services.AddHttpClient(ForType(this.webApiOptions.WebApiType))
                 .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
                 {
+                    // Init HttpTracer handler builder with verbosity
                     var httpHandlerBuilder = new HttpHandlerBuilder(new HttpClientHandler
                     {
                         AutomaticDecompression = this.webApiOptions.DecompressionMethods
                     });
                     httpHandlerBuilder.SetHttpTracerVerbosity(this.webApiOptions.HttpTracerVerbosity);
 
-                    if (this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter != null)
-                        httpHandlerBuilder.AddHandler(new AuthenticatedParameterizedHttpClientHandler(this.webApiOptions.RefitSettings.AuthorizationHeaderValueWithParamGetter));
-
-                    foreach (var httpMessageHandlerType in this.webApiOptions.DelegatingHandlerTypes)
+                    foreach (var delegatingHandlerFactory in this.webApiOptions.DelegatingHandlerFactories)
                     {
-                        httpHandlerBuilder.AddHandler((DelegatingHandler)serviceProvider.GetRequiredService(httpMessageHandlerType));
+                        var delegatingHandler = delegatingHandlerFactory(serviceProvider);
+                        httpHandlerBuilder.AddHandler(delegatingHandler);
                     }
 
                     return httpHandlerBuilder.Build();
                 })
                 .AddTypedClient(this.webApiOptions.WebApiType,(client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettings))
                 .ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
-
-
         }
 
         /// <summary>
