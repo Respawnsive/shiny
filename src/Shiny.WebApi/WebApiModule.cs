@@ -25,26 +25,15 @@ namespace Shiny.WebApi
 
         public override void Register(IServiceCollection services)
         {
-            services.AddHttpClient(ForType(this.webApiOptions.WebApiType))
-                .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
+            var builder = services.AddHttpClient(ForType(this.webApiOptions.WebApiType))
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpTracerHandler(new HttpClientHandler
                 {
-                    // Init HttpTracer handler builder with verbosity
-                    var httpHandlerBuilder = new HttpHandlerBuilder(new HttpClientHandler
-                    {
-                        AutomaticDecompression = this.webApiOptions.DecompressionMethods
-                    });
-                    httpHandlerBuilder.SetHttpTracerVerbosity(this.webApiOptions.HttpTracerVerbosity);
-
-                    foreach (var delegatingHandlerFactory in this.webApiOptions.DelegatingHandlerFactories)
-                    {
-                        var delegatingHandler = delegatingHandlerFactory(serviceProvider);
-                        httpHandlerBuilder.AddHandler(delegatingHandler);
-                    }
-
-                    return httpHandlerBuilder.Build();
-                })
-                .AddTypedClient(this.webApiOptions.WebApiType,(client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettings))
+                    AutomaticDecompression = this.webApiOptions.DecompressionMethods
+                }, this.webApiOptions.HttpTracerVerbosity))
+                .AddTypedClient(this.webApiOptions.WebApiType, (client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettingsFactory(serviceProvider)))
                 .ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
+
+            this.webApiOptions.HttpClientBuilder?.Invoke(builder);
         }
 
         /// <summary>

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using HttpTracer;
+using Microsoft.Extensions.DependencyInjection;
 using Polly;
 using Refit;
 
@@ -14,8 +15,8 @@ namespace Shiny.WebApi
         Type WebApiType { get; }
         Uri BaseAddress { get; }
         DecompressionMethods DecompressionMethods { get; }
-        RefitSettings RefitSettings { get; }
-        IList<Func<IServiceProvider, DelegatingHandler>> DelegatingHandlerFactories { get; }
+        Func<IServiceProvider, RefitSettings> RefitSettingsFactory { get; }
+        Func<IHttpClientBuilder, IHttpClientBuilder>? HttpClientBuilder { get; }
         HttpMessageParts HttpTracerVerbosity { get; }
     }
 }
