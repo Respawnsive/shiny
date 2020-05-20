@@ -1,7 +1,7 @@
 ﻿using System;
 using HttpTracer;
 
-namespace Shiny.WebApi
+namespace Shiny.WebApi.Tracing
 {
     [AttributeUsage(AttributeTargets.Interface)]
     public class TraceAttribute : Attribute

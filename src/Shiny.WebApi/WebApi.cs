@@ -5,8 +5,13 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Polly;
+using Polly.Extensions.Http;
+using Polly.Registry;
 using Shiny.Caching;
 using Shiny.WebApi.Caching;
+using Shiny.WebApi.Policing;
 
 namespace Shiny.WebApi
 {
@@ -15,12 +20,15 @@ namespace Shiny.WebApi
         readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
         readonly TWebApi webApi;
         readonly ICache cache;
+        readonly IPolicyRegistry<string>? policyRegistry;
 
-        public WebApi(TWebApi webApi, ICache cache)
+        public WebApi(TWebApi webApi, ICache cache, IServiceProvider serviceProvider)
         {
             this.webApi = webApi;
             this.cache = cache;
             this.cache.Enabled = true;
+            if(serviceProvider.IsRegistered<IPolicyRegistry<string>>())
+                this.policyRegistry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
         }
 
         public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
@@ -34,7 +42,12 @@ namespace Shiny.WebApi
             if (cachedValue != null)
                 return cachedValue;
 
-            var restResponse = await executeApiMethod.Compile()(this.webApi);
+            var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
+            var executeApiMethodTask = executeApiMethod.Compile()(this.webApi);
+
+            var restResponse = policy != null
+                ? await policy.ExecuteAsync(async () => await executeApiMethodTask)
+                : await executeApiMethodTask;
 
             if (restResponse != null)
             {
@@ -228,8 +241,35 @@ namespace Shiny.WebApi
             public object Value { get; set; }
 
             public string Name { get; set; }
-        } 
+        }
 
         #endregion
+
+        IAsyncPolicy? GetMethodPolicy(MethodCallExpression? methodCallExpression)
+        {
+            if (methodCallExpression == null)
+                return null;
+
+            if (this.policyRegistry == null)
+                return null;
+
+            var policyAttribute = methodCallExpression.Method.GetCustomAttribute<PolicyAttribute>();
+            if (policyAttribute == null)
+                return null;
+
+            IAsyncPolicy? policy = null;
+            foreach (var registryKey in policyAttribute.RegistryKeys)
+            {
+                if (this.policyRegistry.TryGet<IAsyncPolicy>(registryKey, out var registeredPolicy))
+                {
+                    if (policy == null)
+                        policy = registeredPolicy;
+                    else
+                        policy.WrapAsync(registeredPolicy);
+                }
+            }
+
+            return policy;
+        }
     }
 }

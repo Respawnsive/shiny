@@ -1,15 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
-using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Http;
-using Polly;
-using Polly.Extensions.Http;
-using Polly.Registry;
 using Refit;
 
 namespace Shiny.WebApi

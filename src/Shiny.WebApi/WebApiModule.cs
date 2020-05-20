@@ -5,6 +5,8 @@ using System.Reflection;
 using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
 using Refit;
+using Shiny.WebApi.Policing;
+using Shiny.WebApi.Tracing;
 
 namespace Shiny.WebApi
 {
@@ -37,12 +39,12 @@ namespace Shiny.WebApi
                     throw new ArgumentNullException(nameof(x.BaseAddress), $"You must provide a valid web api uri with the {nameof(WebApiAttribute)} or the options builder");
             });
 
+            foreach (var policyRegistryKey in this.webApiOptions.PolicyRegistryKeys)
+                builder.AddPolicyHandlerFromRegistry(policyRegistryKey);
+
             services.AddSingleton(typeof(IWebApi<>).MakeGenericType(this.webApiOptions.WebApiType), typeof(WebApi<>).MakeGenericType(this.webApiOptions.WebApiType));
         }
 
-        /// <summary>
-        /// Refit private method
-        /// </summary>
         static string ForType(Type refitInterfaceType)
         {
             string typeName;
@@ -74,7 +76,16 @@ namespace Shiny.WebApi
 
             var traceAttribute = webApiType.GetTypeInfo().GetCustomAttribute<TraceAttribute>(true);
 
-            var optionsBuilder = new WebApiOptionsBuilder(new WebApiOptions(webApiType, baseAddress, webApiAttribute?.DecompressionMethods, traceAttribute?.Verbosity));
+            var assemblyPolicyAttribute = webApiType.Assembly.GetCustomAttribute<PolicyAttribute>();
+
+            var webApiPolicyAttribute = webApiType.GetTypeInfo().GetCustomAttribute<PolicyAttribute>(true);
+
+            var optionsBuilder = new WebApiOptionsBuilder(new WebApiOptions(webApiType, 
+                baseAddress,
+                webApiAttribute?.DecompressionMethods, 
+                traceAttribute?.Verbosity,
+                assemblyPolicyAttribute?.RegistryKeys,
+                webApiPolicyAttribute?.RegistryKeys));
 
             optionsAction?.Invoke(optionsBuilder);
 
