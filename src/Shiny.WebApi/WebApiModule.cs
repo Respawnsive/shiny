@@ -1,12 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Net;
+using System.Linq;
 using System.Net.Http;
-using System.Text;
+using System.Reflection;
 using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
-using Polly;
-using Polly.Extensions.Http;
 using Refit;
 
 namespace Shiny.WebApi
@@ -34,6 +31,8 @@ namespace Shiny.WebApi
                 .ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
 
             this.webApiOptions.HttpClientBuilder?.Invoke(builder);
+
+            services.AddSingleton(typeof(IWebApi<>).MakeGenericType(this.webApiOptions.WebApiType), typeof(WebApi<>).MakeGenericType(this.webApiOptions.WebApiType));
         }
 
         /// <summary>

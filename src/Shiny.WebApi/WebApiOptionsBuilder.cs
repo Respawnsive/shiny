@@ -23,19 +23,6 @@ namespace Shiny.WebApi
 
         internal WebApiOptions WebApiOptions { get; }
 
-        #region General
-
-        public WebApiOptionsBuilder WithDecompressionMethods(DecompressionMethods decompressionMethods)
-        {
-            this.WebApiOptions.DecompressionMethods = decompressionMethods;
-
-            return this;
-        }
-
-        #endregion
-
-        #region Refit
-
         public WebApiOptionsBuilder ConfigureHttpClientBuilder(Func<IHttpClientBuilder, IHttpClientBuilder> httpClientBuilder)
         {
             this.WebApiOptions.HttpClientBuilder = httpClientBuilder;
@@ -50,9 +37,12 @@ namespace Shiny.WebApi
             return this;
         }
 
-        #endregion
+        public WebApiOptionsBuilder WithDecompressionMethods(DecompressionMethods decompressionMethods)
+        {
+            this.WebApiOptions.DecompressionMethods = decompressionMethods;
 
-        #region HttpTracer
+            return this;
+        }
 
         public WebApiOptionsBuilder WithHttpTracerVerbosity(HttpMessageParts verbosity)
         {
@@ -60,118 +50,5 @@ namespace Shiny.WebApi
 
             return this;
         }
-
-        #endregion
-
-        //#region Polly
-
-        //public WebApiOptionsBuilder AddPolicyHandler(IAsyncPolicy<HttpResponseMessage> policy)
-        //{
-        //    if (policy == null)
-        //        throw new ArgumentNullException(nameof(policy));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider => new PolicyHttpMessageHandler(policy));
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddPolicyHandler(Func<HttpRequestMessage, IAsyncPolicy<HttpResponseMessage>> policySelector)
-        //{
-        //    if(policySelector == null)
-        //        throw new ArgumentNullException(nameof(policySelector));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider => new PolicyHttpMessageHandler(policySelector));
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddPolicyHandler(Func<IServiceProvider, HttpRequestMessage, IAsyncPolicy<HttpResponseMessage>> policySelector)
-        //{
-        //    if (policySelector == null)
-        //        throw new ArgumentNullException(nameof(policySelector));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider => new PolicyHttpMessageHandler(request => policySelector(serviceProvider, request)));
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddPolicyHandlerFromRegistry(string policyKey)
-        //{
-        //    if (policyKey == null)
-        //        throw new ArgumentNullException(nameof(policyKey));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider =>
-        //    {
-        //        var registry = serviceProvider.GetRequiredService<IReadOnlyPolicyRegistry<string>>();
-
-        //        var policy = registry.Get<IAsyncPolicy<HttpResponseMessage>>(policyKey);
-
-        //        return new PolicyHttpMessageHandler(policy);
-        //    });
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddPolicyHandlerFromRegistry(Func<IReadOnlyPolicyRegistry<string>, HttpRequestMessage, IAsyncPolicy<HttpResponseMessage>> policySelector)
-        //{
-        //    if (policySelector == null)
-        //        throw new ArgumentNullException(nameof(policySelector));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider =>
-        //    {
-        //        var registry = serviceProvider.GetRequiredService<IReadOnlyPolicyRegistry<string>>();
-
-        //        return new PolicyHttpMessageHandler(request => policySelector(registry, request));
-        //    });
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddTransientHttpErrorPolicy(Func<PolicyBuilder<HttpResponseMessage>, IAsyncPolicy<HttpResponseMessage>> configurePolicy)
-        //{
-        //    if (configurePolicy == null)
-        //        throw new ArgumentNullException(nameof(configurePolicy));
-
-        //    var policyBuilder = HttpPolicyExtensions.HandleTransientHttpError();
-
-        //    // Important - cache policy instances so that they are singletons per handler.
-        //    var policy = configurePolicy(policyBuilder);
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider => new PolicyHttpMessageHandler(policy));
-
-        //    return this;
-        //}
-
-        //public WebApiOptionsBuilder AddPolicyHandler(Func<IServiceProvider, HttpRequestMessage, string, IAsyncPolicy<HttpResponseMessage>> policyFactory, Func<HttpRequestMessage, string> keySelector)
-        //{
-        //    if (keySelector == null)
-        //        throw new ArgumentNullException(nameof(keySelector));
-
-        //    if (policyFactory == null)
-        //        throw new ArgumentNullException(nameof(policyFactory));
-
-        //    this.WebApiOptions.DelegatingHandlerFactories.Add(serviceProvider =>
-        //    {
-        //        var registry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
-
-        //        return new PolicyHttpMessageHandler((request) =>
-        //        {
-        //            var key = keySelector(request);
-
-        //            if (registry.TryGet<IAsyncPolicy<HttpResponseMessage>>(key, out var policy))
-        //            {
-        //                return policy;
-        //            }
-
-        //            var newPolicy = policyFactory(serviceProvider, request, key);
-        //            registry[key] = newPolicy;
-        //            return newPolicy;
-        //        });
-        //    });
-
-        //    return this;
-        //}
-
-        //#endregion
     }
 }
