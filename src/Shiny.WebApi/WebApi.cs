@@ -12,7 +12,7 @@ namespace Shiny.WebApi
 {
     public class WebApi<TWebApi> : IWebApi<TWebApi>
     {
-        private readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
+        readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
         readonly TWebApi webApi;
         readonly ICache cache;
 
@@ -20,6 +20,7 @@ namespace Shiny.WebApi
         {
             this.webApi = webApi;
             this.cache = cache;
+            this.cache.Enabled = true;
         }
 
         public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
@@ -37,24 +38,21 @@ namespace Shiny.WebApi
 
             if (restResponse != null)
             {
-                var refitCacheAttributes = this.GetRefitCacheAttribute(executeApiMethod);
+                var cacheAttributes = this.GetCacheAttribute(executeApiMethod);
 
-                await this.cache.Set(cacheKey, restResponse, TimeSpan.FromHours(1)); 
+                await this.cache.Set(cacheKey, restResponse, cacheAttributes.CacheAttribute.CacheTtl); 
             }
-
-            var test = await this.cache.GetCachedItems();
 
             return restResponse;
         }
 
         public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod) => executeApiMethod.Compile()(this.webApi);
 
-        public bool IsMethodCacheable<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> restExpression)
+        #region Caching
+
+        bool IsMethodCacheable<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> restExpression)
         {
             var methodToCacheDetails = this.GetMethodToCacheData(restExpression);
-
-            if (methodToCacheDetails == null)
-                return false;
 
             lock (this)
             {
@@ -62,12 +60,12 @@ namespace Shiny.WebApi
                 if (this.cacheableMethodsSet.ContainsKey(methodToCacheData))
                     return true;
 
-                var refitCacheAttribute =
+                var cacheAttribute =
                     methodToCacheData
                         .MethodInfo
                         .GetCustomAttribute<CacheAttribute>();
 
-                if (refitCacheAttribute == null)
+                if (cacheAttribute == null)
                     return false;
 
                 var methodParameters = methodToCacheData.MethodInfo.GetParameters()
@@ -96,7 +94,7 @@ namespace Shiny.WebApi
 
                 this.cacheableMethodsSet.Add(
                     methodToCacheData,
-                    new MethodCacheAttributes(refitCacheAttribute, cachePrimaryKey?.CacheAttribute, cachePrimaryKey?.ParameterName, cachePrimaryKey?.ParameterType,
+                    new MethodCacheAttributes(cacheAttribute, cachePrimaryKey?.CacheAttribute, cachePrimaryKey?.ParameterName, cachePrimaryKey?.ParameterType,
                         cachePrimaryKey?.ParameterOrder ?? 0)
                 );
             }
@@ -104,62 +102,46 @@ namespace Shiny.WebApi
             return true;
         }
 
-        private MethodCacheDetails? GetMethodToCacheData<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> restExpression)
+        MethodCacheDetails GetMethodToCacheData<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> restExpression)
         {
             var apiInterfaceType = typeof(TApi);
-
-            var methodBody = restExpression.Body as MethodCallExpression;
-
-            if (methodBody == null)
-                return null;
-
+            var methodBody = (MethodCallExpression)restExpression.Body;
             var methodInfo = methodBody.Method;
             return new MethodCacheDetails(apiInterfaceType, methodInfo);
         }
 
-        private static IEnumerable<ExtractedConstant> ExtractConstants(Expression expression)
+        static IEnumerable<ExtractedConstant> ExtractConstants(Expression expression)
         {
             if (expression == null)
                 yield break;
 
-            if (expression is ConstantExpression)
+            if (expression is ConstantExpression constantsExpression)
+                yield return new ExtractedConstant { Name = constantsExpression.Type.Name, Value = constantsExpression.Value };
+
+
+            else if (expression is LambdaExpression lambdaExpression)
+                foreach (var constant in ExtractConstants(lambdaExpression.Body))
+                    yield return constant;
+
+            else if (expression is UnaryExpression unaryExpression)
+                foreach (var constant in ExtractConstants(unaryExpression.Operand))
+                    yield return constant;
+
+            else if (expression is MethodCallExpression methodCallExpression)
             {
-                var constantsExpression = expression as ConstantExpression;
-                yield return
-                    new ExtractedConstant() { Name = constantsExpression.Type.Name, Value = constantsExpression.Value };
-            }
-
-
-            else if (expression is LambdaExpression)
-                foreach (var constant in ExtractConstants(
-                    ((LambdaExpression)expression).Body))
-                    yield return constant;
-
-            else if (expression is UnaryExpression)
-                foreach (var constant in ExtractConstants(
-                    ((UnaryExpression)expression).Operand))
-                    yield return constant;
-
-            else if (expression is MethodCallExpression)
-            {
-                foreach (var arg in ((MethodCallExpression)expression).Arguments)
-                foreach (var constant in ExtractConstants(arg))
-                    yield return constant;
-                foreach (var constant in ExtractConstants(
-                    ((MethodCallExpression)expression).Object))
+                foreach (var arg in methodCallExpression.Arguments)
+                    foreach (var constant in ExtractConstants(arg))
+                        yield return constant;
+                foreach (var constant in ExtractConstants(methodCallExpression.Object))
                     yield return constant;
             }
-            else if (expression is MemberExpression)
+            else if (expression is MemberExpression memberExpression)
             {
-                var memberExpression = expression as MemberExpression;
-
                 foreach (var constants in ExtractConstants(memberExpression.Expression))
                     yield return constants;
             }
-            else if (expression is InvocationExpression)
+            else if (expression is InvocationExpression invocationExpression)
             {
-                var invocationExpression = expression as InvocationExpression;
-
                 foreach (var constants in ExtractConstants(invocationExpression.Expression))
                     yield return constants;
             }
@@ -168,15 +150,15 @@ namespace Shiny.WebApi
                 throw new NotImplementedException();
         }
 
-        private string GetCacheKey<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> fromExpression)
+        string GetCacheKey<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> fromExpression)
         {
-            var methodCallExpression = fromExpression.Body as MethodCallExpression;
+            var methodCallExpression = (MethodCallExpression)fromExpression.Body;
 
-            var cacheKeyPrefix = typeof(TApi).ToString() + "/" + methodCallExpression.Method.Name.ToString();
+            var cacheKeyPrefix = $"{typeof(TApi)}.{methodCallExpression.Method.Name}";
             if (!methodCallExpression.Arguments.Any())
-                return cacheKeyPrefix;
+                return $"{cacheKeyPrefix}()";
 
-            var cacheAttributes = this.GetRefitCacheAttribute(fromExpression);
+            var cacheAttributes = this.GetCacheAttribute(fromExpression);
 
             var extractedArguments = methodCallExpression.Arguments
                 .SelectMany(x => ExtractConstants(x))
@@ -185,9 +167,10 @@ namespace Shiny.WebApi
                 .ToList();
 
             if (!extractedArguments.Any())
-                return cacheKeyPrefix;
+                return $"{cacheKeyPrefix}()";
 
-            object primaryKeyValue = null;
+            var primaryKeyName = cacheAttributes.ParameterName;
+            object primaryKeyValue;
             var extractedArgument = extractedArguments[cacheAttributes.ParameterOrder];
             var extractedArgumentValue = extractedArgument.Value;
 
@@ -197,7 +180,9 @@ namespace Shiny.WebApi
                                           extractedArgumentValue is string;
 
             if (isArgumentValuePrimitve)
+            {
                 primaryKeyValue = extractedArgument.Value;
+            }
             else
             {
                 var primaryKeyValueField = extractedArgumentValue.GetType().GetRuntimeFields().Select((x, i) => new
@@ -227,10 +212,10 @@ namespace Shiny.WebApi
             if (primaryKeyValue == null)
                 throw new InvalidOperationException($"{nameof(CacheKeyAttribute)} primary key found for: " + cacheKeyPrefix);
 
-            return $"{cacheKeyPrefix}/{primaryKeyValue.ToString()}";
+            return $"{cacheKeyPrefix}({primaryKeyName}:{primaryKeyValue})";
         }
 
-        private MethodCacheAttributes GetRefitCacheAttribute<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> expression)
+        MethodCacheAttributes? GetCacheAttribute<TApi, TResult>(Expression<Func<TApi, Task<TResult>>> expression)
         {
             lock (this)
             {
@@ -244,6 +229,8 @@ namespace Shiny.WebApi
             public object Value { get; set; }
 
             public string Name { get; set; }
-        }
+        } 
+
+        #endregion
     }
 }
