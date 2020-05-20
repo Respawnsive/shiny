@@ -40,7 +40,7 @@ namespace Shiny.WebApi
             {
                 var cacheAttributes = this.GetCacheAttribute(executeApiMethod);
 
-                await this.cache.Set(cacheKey, restResponse, cacheAttributes.CacheAttribute.CacheTtl); 
+                await this.cache.Set(cacheKey, restResponse, cacheAttributes.CacheAttribute.LifeSpan); 
             }
 
             return restResponse;

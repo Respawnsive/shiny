@@ -2,6 +2,7 @@
 
 namespace Shiny.WebApi.Caching
 {
+    [AttributeUsage(AttributeTargets.Parameter)]
     public class CacheKeyAttribute : Attribute
     {
         public CacheKeyAttribute()

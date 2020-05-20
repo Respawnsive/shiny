@@ -2,31 +2,29 @@
 
 namespace Shiny.WebApi.Caching
 {
+    [AttributeUsage(AttributeTargets.Method)]
     public class CacheAttribute : Attribute
     {
-        /// <summary>
-        /// Cache Response Cache Time To Live Duration
-        /// </summary>
-        public TimeSpan? CacheTtl { get; }
+        public TimeSpan? LifeSpan { get; }
 
         public CacheAttribute()
         {
 
         }
 
-        public CacheAttribute(int ttlInSeconds) : this(TimeSpan.FromSeconds(ttlInSeconds))
+        public CacheAttribute(int lifeInSeconds) : this(TimeSpan.FromSeconds(lifeInSeconds))
         {
 
         }
 
-        public CacheAttribute(int ttlHours, int ttlSeconds) : this(TimeSpan.FromHours(ttlHours).Add(TimeSpan.FromSeconds(ttlSeconds)))
+        public CacheAttribute(int lifeInHours, int lifeInSeconds) : this(TimeSpan.FromHours(lifeInHours).Add(TimeSpan.FromSeconds(lifeInSeconds)))
         {
 
         }
 
-        public CacheAttribute(TimeSpan cacheTtl)
+        public CacheAttribute(TimeSpan lifeSpan)
         {
-            this.CacheTtl = cacheTtl;
+            this.LifeSpan = lifeSpan;
         }
     }
 }
