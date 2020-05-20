@@ -14,9 +14,9 @@ namespace Shiny.WebApi
     {
         Type WebApiType { get; }
         Uri? BaseAddress { get; }
+        HttpMessageParts HttpTracerVerbosity { get; }
         DecompressionMethods DecompressionMethods { get; }
         Func<IServiceProvider, RefitSettings> RefitSettingsFactory { get; }
         Func<IHttpClientBuilder, IHttpClientBuilder>? HttpClientBuilder { get; }
-        HttpMessageParts HttpTracerVerbosity { get; }
     }
 }

@@ -36,19 +36,5 @@ namespace Shiny.WebApi
 
             return this;
         }
-
-        public WebApiOptionsBuilder WithDecompressionMethods(DecompressionMethods decompressionMethods)
-        {
-            this.WebApiOptions.DecompressionMethods = decompressionMethods;
-
-            return this;
-        }
-
-        public WebApiOptionsBuilder WithHttpTracerVerbosity(HttpMessageParts verbosity)
-        {
-            this.WebApiOptions.HttpTracerVerbosity = verbosity;
-
-            return this;
-        }
     }
 }

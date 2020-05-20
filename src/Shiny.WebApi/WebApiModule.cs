@@ -69,10 +69,12 @@ namespace Shiny.WebApi
 
         WebApiOptions CreateWebApiOptions(Type webApiType, Action<WebApiOptionsBuilder>? optionsAction = null)
         {
-            var webApiDefinitionAttribute = webApiType.GetTypeInfo().GetCustomAttribute<WebApiAttribute>(true);
-            Uri.TryCreate(webApiDefinitionAttribute?.BaseUri, UriKind.RelativeOrAbsolute, out var baseAddress);
+            var webApiAttribute = webApiType.GetTypeInfo().GetCustomAttribute<WebApiAttribute>(true);
+            Uri.TryCreate(webApiAttribute?.BaseUri, UriKind.RelativeOrAbsolute, out var baseAddress);
 
-            var optionsBuilder = new WebApiOptionsBuilder(new WebApiOptions(webApiType, baseAddress));
+            var traceAttribute = webApiType.GetTypeInfo().GetCustomAttribute<TraceAttribute>(true);
+
+            var optionsBuilder = new WebApiOptionsBuilder(new WebApiOptions(webApiType, baseAddress, webApiAttribute?.DecompressionMethods, traceAttribute?.Verbosity));
 
             optionsAction?.Invoke(optionsBuilder);
 
