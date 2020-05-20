@@ -61,9 +61,8 @@ namespace Shiny.WebApi
                     return true;
 
                 var cacheAttribute =
-                    methodToCacheData
-                        .MethodInfo
-                        .GetCustomAttribute<CacheAttribute>();
+                    methodToCacheDetails.ApiInterfaceType.GetTypeInfo().GetCustomAttribute<CacheAttribute>() ??
+                    methodToCacheData.MethodInfo.GetCustomAttribute<CacheAttribute>();
 
                 if (cacheAttribute == null)
                     return false;

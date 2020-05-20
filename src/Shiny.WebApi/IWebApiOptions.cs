@@ -13,7 +13,7 @@ namespace Shiny.WebApi
     public interface IWebApiOptions
     {
         Type WebApiType { get; }
-        Uri BaseAddress { get; }
+        Uri? BaseAddress { get; }
         DecompressionMethods DecompressionMethods { get; }
         Func<IServiceProvider, RefitSettings> RefitSettingsFactory { get; }
         Func<IHttpClientBuilder, IHttpClientBuilder>? HttpClientBuilder { get; }

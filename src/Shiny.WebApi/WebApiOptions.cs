@@ -11,7 +11,7 @@ namespace Shiny.WebApi
 {
     public class WebApiOptions : IWebApiOptions
     {
-        public WebApiOptions(Type webApiType, Uri baseAddress)
+        public WebApiOptions(Type webApiType, Uri? baseAddress)
         {
             this.WebApiType = webApiType;
             this.BaseAddress = baseAddress;
@@ -19,7 +19,7 @@ namespace Shiny.WebApi
         }
 
         public Type WebApiType { get; }
-        public Uri BaseAddress { get; }
+        public Uri? BaseAddress { get; }
         public DecompressionMethods DecompressionMethods { get; internal set; } = DecompressionMethods.None;
         public Func<IServiceProvider, RefitSettings> RefitSettingsFactory { get; internal set; }
         public Func<IHttpClientBuilder, IHttpClientBuilder>? HttpClientBuilder { get; internal set; }

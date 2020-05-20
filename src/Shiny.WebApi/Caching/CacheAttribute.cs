@@ -2,7 +2,7 @@
 
 namespace Shiny.WebApi.Caching
 {
-    [AttributeUsage(AttributeTargets.Method)]
+    [AttributeUsage(AttributeTargets.Interface | AttributeTargets.Method)]
     public class CacheAttribute : Attribute
     {
         public TimeSpan? LifeSpan { get; }

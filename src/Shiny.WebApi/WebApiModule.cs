@@ -12,12 +12,9 @@ namespace Shiny.WebApi
     {
         readonly WebApiOptions webApiOptions;
 
-        public WebApiModule(Type webApiType, string baseUrl, Action<WebApiOptionsBuilder>? optionsAction = null)
+        public WebApiModule(Type webApiType, Action<WebApiOptionsBuilder>? optionsAction = null)
         {
-            if(baseUrl.IsEmpty() || !Uri.TryCreate(baseUrl, UriKind.RelativeOrAbsolute, out var baseAddress))
-                throw new ArgumentException("baseUrl parameter should be a valid url");
-
-            this.webApiOptions = this.CreateWebApiOptions(webApiType, baseAddress, optionsAction);
+            this.webApiOptions = this.CreateWebApiOptions(webApiType, optionsAction);
         }
 
         public override void Register(IServiceCollection services)
@@ -27,10 +24,18 @@ namespace Shiny.WebApi
                 {
                     AutomaticDecompression = this.webApiOptions.DecompressionMethods
                 }, this.webApiOptions.HttpTracerVerbosity))
-                .AddTypedClient(this.webApiOptions.WebApiType, (client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettingsFactory(serviceProvider)))
-                .ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
+                .AddTypedClient(this.webApiOptions.WebApiType, (client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettingsFactory(serviceProvider)));
+
+            if(this.webApiOptions.BaseAddress != null)
+                builder.ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);
 
             this.webApiOptions.HttpClientBuilder?.Invoke(builder);
+
+            builder.ConfigureHttpClient(x =>
+            {
+                if(x.BaseAddress == null)
+                    throw new ArgumentNullException(nameof(x.BaseAddress), $"You must provide a valid web api uri with the {nameof(WebApiAttribute)} or the options builder");
+            });
 
             services.AddSingleton(typeof(IWebApi<>).MakeGenericType(this.webApiOptions.WebApiType), typeof(WebApi<>).MakeGenericType(this.webApiOptions.WebApiType));
         }
@@ -62,8 +67,11 @@ namespace Shiny.WebApi
             return typeName;
         }
 
-        WebApiOptions CreateWebApiOptions(Type webApiType, Uri baseAddress, Action<WebApiOptionsBuilder>? optionsAction = null)
+        WebApiOptions CreateWebApiOptions(Type webApiType, Action<WebApiOptionsBuilder>? optionsAction = null)
         {
+            var webApiDefinitionAttribute = webApiType.GetTypeInfo().GetCustomAttribute<WebApiAttribute>(true);
+            Uri.TryCreate(webApiDefinitionAttribute?.BaseUri, UriKind.RelativeOrAbsolute, out var baseAddress);
+
             var optionsBuilder = new WebApiOptionsBuilder(new WebApiOptions(webApiType, baseAddress));
 
             optionsAction?.Invoke(optionsBuilder);
