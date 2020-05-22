@@ -2,12 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reactive;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
+using System.Reactive.Threading.Tasks;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;
-using Polly.Extensions.Http;
 using Polly.Registry;
 using Shiny.Caching;
 using Shiny.WebApi.Caching;
@@ -31,35 +34,104 @@ namespace Shiny.WebApi
                 this.policyRegistry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
         }
 
+        public IObservable<TResult> Execute<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
+        {
+            string? cacheKey = null;
+            MethodCacheAttributes? cacheAttributes = null;
+            var executeApiMethodAsObservableTask = executeApiMethod.Compile()(this.webApi).ToObservable();
+
+            if (this.IsMethodCacheable(executeApiMethod))
+            {
+                cacheKey = this.GetCacheKey(executeApiMethod);
+                cacheAttributes = this.GetCacheAttribute(executeApiMethod);
+            }
+
+            var fetch = Observable.DeferAsync(async token =>
+                {
+                    if (!string.IsNullOrWhiteSpace(cacheKey))
+                    {
+                        var result = await this.cache.Get<TResult>(cacheKey);
+                        return Observable.Return(result);
+                    }
+
+                    return Observable.Empty<TResult>();
+                }).Select(x => x == null)
+                .Where(x => x)
+                .SelectMany(_ =>
+                {
+                    var fetchObs = executeApiMethodAsObservableTask.Catch<TResult, Exception>(
+                        ex =>
+                        {
+                            var shouldInvalidate =
+                                cacheAttributes != null && cacheAttributes.CacheAttribute.ShouldInvalidateOnError && !string.IsNullOrWhiteSpace(cacheKey)
+                                    ? this.cache.Remove(cacheKey).ToObservable()
+                                    : Observable.Return(false);
+                            return shouldInvalidate.SelectMany(_ => Observable.Throw<TResult>(ex));
+                        });
+
+                    return fetchObs.SelectMany(x => this.cache.Remove(cacheKey).ToObservable().Select(_ => x))
+                        .SelectMany(x => this.cache.Set(cacheKey, x, cacheAttributes.CacheAttribute.LifeSpan).ToObservable().Select(_ => x));
+                });
+
+            var result = this.cache.Get<TResult>(cacheKey).ToObservable().Select(x => new Tuple<TResult, bool>(x, true))
+                .Catch(Observable.Return(new Tuple<TResult, bool>(default, false)));
+
+            return result.SelectMany(x => x.Item2 ? Observable.Return(x.Item1) : Observable.Empty<TResult>())
+                .Concat(fetch).Multicast(new ReplaySubject<TResult>()).RefCount();
+        }
+
         public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
         {
-            if (!this.IsMethodCacheable(executeApiMethod))
-                return await executeApiMethod.Compile()(this.webApi).ConfigureAwait(false);
+            string? cacheKey = null;
+            TResult result = default;
+            MethodCacheAttributes? cacheAttributes = null;
 
-            var cacheKey = this.GetCacheKey(executeApiMethod);
-            var cachedValue = await this.cache.Get<TResult>(cacheKey);
+            if (this.IsMethodCacheable(executeApiMethod))
+            {
+                cacheKey = this.GetCacheKey(executeApiMethod);
+                result = await this.cache.Get<TResult>(cacheKey); 
+                cacheAttributes = this.GetCacheAttribute(executeApiMethod);
+            }
 
-            if (cachedValue != null)
-                return cachedValue;
+            if (result == null || cacheAttributes?.CacheAttribute.Mode == CacheMode.GetAndFetch)
+            {
+                var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
+                var executeApiMethodTask = executeApiMethod.Compile()(this.webApi);
 
+                try
+                {
+                    result = policy != null
+                        ? await policy.ExecuteAsync(async () => await executeApiMethodTask)
+                        : await executeApiMethodTask;
+                }
+                catch (Exception e)
+                {
+                    throw new WebApiException<TResult>(e, result);
+                }
+
+                if (result != null && !string.IsNullOrWhiteSpace(cacheKey) && cacheAttributes != null)
+                    await this.cache.Set(cacheKey, result, cacheAttributes.CacheAttribute.LifeSpan);
+            }
+
+            return result;
+        }
+
+        public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod)
+        {
             var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
             var executeApiMethodTask = executeApiMethod.Compile()(this.webApi);
 
-            var restResponse = policy != null
-                ? await policy.ExecuteAsync(async () => await executeApiMethodTask)
-                : await executeApiMethodTask;
-
-            if (restResponse != null)
+            try
             {
-                var cacheAttributes = this.GetCacheAttribute(executeApiMethod);
-
-                await this.cache.Set(cacheKey, restResponse, cacheAttributes.CacheAttribute.LifeSpan); 
+                return policy != null
+                        ? policy.ExecuteAsync(async () => await executeApiMethodTask)
+                        : executeApiMethodTask;
             }
-
-            return restResponse;
+            catch (Exception e)
+            {
+                throw new WebApiException(e, Unit.Default);
+            }
         }
-
-        public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod) => executeApiMethod.Compile()(this.webApi);
 
         #region Caching
 
@@ -245,6 +317,8 @@ namespace Shiny.WebApi
 
         #endregion
 
+        #region Policing
+
         IAsyncPolicy? GetMethodPolicy(MethodCallExpression? methodCallExpression)
         {
             if (methodCallExpression == null)
@@ -270,6 +344,8 @@ namespace Shiny.WebApi
             }
 
             return policy;
-        }
+        } 
+
+        #endregion
     }
 }

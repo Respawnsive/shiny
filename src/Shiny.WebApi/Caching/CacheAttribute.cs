@@ -6,15 +6,14 @@ namespace Shiny.WebApi.Caching
     public class CacheAttribute : Attribute
     {
         public TimeSpan? LifeSpan { get; }
+        public CacheMode Mode { get; }
+        public bool ShouldInvalidateOnError { get; }
 
-        public CacheAttribute()
+        public CacheAttribute(CacheMode mode = CacheMode.GetOrFetch, TimeSpan? lifeSpan = null, bool shouldInvalidateOnError = false)
         {
-
-        }
-
-        public CacheAttribute(TimeSpan lifeSpan)
-        {
+            this.Mode = mode;
             this.LifeSpan = lifeSpan;
+            this.ShouldInvalidateOnError = shouldInvalidateOnError;
         }
     }
 }
