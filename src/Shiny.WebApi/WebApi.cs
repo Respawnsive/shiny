@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reactive;
@@ -21,6 +23,8 @@ namespace Shiny.WebApi
     public class WebApi<TWebApi> : IWebApi<TWebApi>
     {
         readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
+        private readonly ConcurrentDictionary<string, object> _inflightFetchRequests = new ConcurrentDictionary<string, object>();
+
         readonly TWebApi webApi;
         readonly ICache cache;
         readonly IPolicyRegistry<string>? policyRegistry;
@@ -38,46 +42,73 @@ namespace Shiny.WebApi
         {
             string? cacheKey = null;
             MethodCacheAttributes? cacheAttributes = null;
-            var executeApiMethodAsObservableTask = executeApiMethod.Compile()(this.webApi).ToObservable();
+            var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
+            var executeApiMethodAsObservableTask = (policy != null
+                    ? policy.ExecuteAsync(async () => await executeApiMethod.Compile()(this.webApi))
+                    : executeApiMethod.Compile()(this.webApi)).ToObservable();
+            CacheMode? cacheMode = null;
 
             if (this.IsMethodCacheable(executeApiMethod))
             {
                 cacheKey = this.GetCacheKey(executeApiMethod);
                 cacheAttributes = this.GetCacheAttribute(executeApiMethod);
+                cacheMode = cacheAttributes.CacheAttribute.Mode;
             }
 
-            var fetch = Observable.DeferAsync(async token =>
+            if (cacheMode == null)
+            {
+                return executeApiMethodAsObservableTask;
+            }
+            else if (cacheMode == CacheMode.GetOrFetch)
+            {
+                return this.cache.Get<TResult>(cacheKey).ToObservable().Catch<TResult, Exception>(ex =>
                 {
-                    if (!string.IsNullOrWhiteSpace(cacheKey))
-                    {
-                        var result = await this.cache.Get<TResult>(cacheKey);
-                        return Observable.Return(result);
-                    }
+                    var prefixedKey = this.cache.GetHashCode().ToString(CultureInfo.InvariantCulture) + cacheKey;
 
-                    return Observable.Empty<TResult>();
-                }).Select(x => x == null)
-                .Where(x => x)
-                .SelectMany(_ =>
-                {
-                    var fetchObs = executeApiMethodAsObservableTask.Catch<TResult, Exception>(
-                        ex =>
+                    var result = Observable.Defer(() => executeApiMethodAsObservableTask)
+                        .Do(x => this.cache.Set(cacheKey, x, cacheAttributes.CacheAttribute.LifeSpan))
+                        .Finally(() => this._inflightFetchRequests.TryRemove(prefixedKey, out var _))
+                        .Multicast(new AsyncSubject<TResult>())
+                        .RefCount();
+
+                    return (IObservable<TResult>)this._inflightFetchRequests.GetOrAdd(prefixedKey, result);
+                });
+            }
+            else
+            {
+                var fetch = Observable.DeferAsync(async token =>
                         {
-                            var shouldInvalidate =
-                                cacheAttributes != null && cacheAttributes.CacheAttribute.ShouldInvalidateOnError && !string.IsNullOrWhiteSpace(cacheKey)
-                                    ? this.cache.Remove(cacheKey).ToObservable()
-                                    : Observable.Return(false);
-                            return shouldInvalidate.SelectMany(_ => Observable.Throw<TResult>(ex));
+                            if (!string.IsNullOrWhiteSpace(cacheKey))
+                            {
+                                var result = await this.cache.Get<TResult>(cacheKey);
+                                return Observable.Return(result);
+                            }
+
+                            return Observable.Empty<TResult>();
+                        }).Select(x => x == null)
+                        .Where(x => x)
+                        .SelectMany(_ =>
+                        {
+                            var fetchObs = executeApiMethodAsObservableTask.Catch<TResult, Exception>(
+                                ex =>
+                                {
+                                    var shouldInvalidate =
+                                        cacheAttributes != null && cacheAttributes.CacheAttribute.ShouldInvalidateOnError && !string.IsNullOrWhiteSpace(cacheKey)
+                                            ? this.cache.Remove(cacheKey).ToObservable()
+                                            : Observable.Return(false);
+                                    return shouldInvalidate.SelectMany(_ => Observable.Throw<TResult>(ex));
+                                });
+
+                            return fetchObs.SelectMany(x => this.cache.Remove(cacheKey).ToObservable().Select(_ => x))
+                                .SelectMany(x => this.cache.Set(cacheKey, x, cacheAttributes.CacheAttribute.LifeSpan).ToObservable().Select(_ => x));
                         });
 
-                    return fetchObs.SelectMany(x => this.cache.Remove(cacheKey).ToObservable().Select(_ => x))
-                        .SelectMany(x => this.cache.Set(cacheKey, x, cacheAttributes.CacheAttribute.LifeSpan).ToObservable().Select(_ => x));
-                });
+                var result = this.cache.Get<TResult>(cacheKey).ToObservable().Select(x => new Tuple<TResult, bool>(x, true))
+                    .Catch(Observable.Return(new Tuple<TResult, bool>(default, false)));
 
-            var result = this.cache.Get<TResult>(cacheKey).ToObservable().Select(x => new Tuple<TResult, bool>(x, true))
-                .Catch(Observable.Return(new Tuple<TResult, bool>(default, false)));
-
-            return result.SelectMany(x => x.Item2 ? Observable.Return(x.Item1) : Observable.Empty<TResult>())
-                .Concat(fetch).Multicast(new ReplaySubject<TResult>()).RefCount();
+                return result.SelectMany(x => x.Item2 ? Observable.Return(x.Item1) : Observable.Empty<TResult>())
+                    .Concat(fetch).Multicast(new ReplaySubject<TResult>()).RefCount(); 
+            }
         }
 
         public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
