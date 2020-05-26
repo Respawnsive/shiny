@@ -6,6 +6,7 @@ using Fusillade;
 using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
 using Refit;
+using Shiny.WebApi.Lazying;
 using Shiny.WebApi.Policing;
 using Shiny.WebApi.Tracing;
 
@@ -25,11 +26,22 @@ namespace Shiny.WebApi
             foreach (var priority in ((Priority[])Enum.GetValues(typeof(Priority))).Where(x => x != Priority.Explicit))
             {
                 var builder = services.AddHttpClient(ForType(this.webApiOptions.WebApiType, priority))
-                    .ConfigurePrimaryHttpMessageHandler(() => new RateLimitedHttpMessageHandler(new HttpTracerHandler(new HttpClientHandler
-                    {
-                        AutomaticDecompression = this.webApiOptions.DecompressionMethods
-                    }, this.webApiOptions.HttpTracerVerbosity), priority))
-                    .AddTypedClient(this.webApiOptions.WebApiType, (client, serviceProvider) => RestService.For(this.webApiOptions.WebApiType, client, this.webApiOptions.RefitSettingsFactory(serviceProvider)));
+                    .ConfigurePrimaryHttpMessageHandler(() =>
+                        new RateLimitedHttpMessageHandler(
+                            new HttpTracerHandler(
+                                new HttpClientHandler
+                                {
+                                    AutomaticDecompression = this.webApiOptions.DecompressionMethods
+                                }, this.webApiOptions.HttpTracerVerbosity), priority))
+                    .AddTypedClient(typeof(ILazyDependency<>).MakeGenericType(this.webApiOptions.WebApiType),
+                        (client, serviceProvider) =>
+                            typeof(LazyDependency<>).MakeGenericType(this.webApiOptions.WebApiType)
+                                .GetConstructor(new[] {typeof(Func<object>)})
+                                .Invoke(new object[]
+                                {
+                                    new Func<object>(() => RestService.For(this.webApiOptions.WebApiType, client,
+                                        this.webApiOptions.RefitSettingsFactory(serviceProvider)))
+                                }));
 
                 if (this.webApiOptions.BaseAddress != null)
                     builder.ConfigureHttpClient(x => x.BaseAddress = this.webApiOptions.BaseAddress);

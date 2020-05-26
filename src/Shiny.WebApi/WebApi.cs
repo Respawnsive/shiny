@@ -17,6 +17,7 @@ using Polly;
 using Polly.Registry;
 using Shiny.Caching;
 using Shiny.WebApi.Caching;
+using Shiny.WebApi.Lazying;
 using Shiny.WebApi.Policing;
 
 namespace Shiny.WebApi
@@ -26,11 +27,11 @@ namespace Shiny.WebApi
         readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
         private readonly ConcurrentDictionary<string, object> _inflightFetchRequests = new ConcurrentDictionary<string, object>();
 
-        readonly IEnumerable<TWebApi> webApis;
+        readonly IEnumerable<ILazyDependency<TWebApi>> webApis;
         readonly ICache cache;
         readonly IPolicyRegistry<string>? policyRegistry;
 
-        public WebApi(IEnumerable<TWebApi> webApis, ICache cache, IServiceProvider serviceProvider)
+        public WebApi(IEnumerable<ILazyDependency<TWebApi>> webApis, ICache cache, IServiceProvider serviceProvider)
         {
             this.webApis = webApis;
             this.cache = cache;
@@ -44,15 +45,15 @@ namespace Shiny.WebApi
             switch (priority)
             {
                 case Priority.Speculative:
-                    return this.webApis.ElementAt(0);
+                    return this.webApis.ElementAt(0).Value;
                 case Priority.Background:
-                    return this.webApis.ElementAt(1);
+                    return this.webApis.ElementAt(1).Value;
                 case Priority.UserInitiated:
-                    return this.webApis.ElementAt(2);
+                    return this.webApis.ElementAt(2).Value;
                 case Priority.Explicit:
                     throw new NotImplementedException();
                 default:
-                    return this.webApis.ElementAt(2);
+                    return this.webApis.ElementAt(2).Value;
             }
         }
 
