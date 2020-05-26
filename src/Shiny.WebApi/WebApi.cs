@@ -11,6 +11,7 @@ using System.Reactive.Threading.Tasks;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Fusillade;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;
 using Polly.Registry;
@@ -25,27 +26,44 @@ namespace Shiny.WebApi
         readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
         private readonly ConcurrentDictionary<string, object> _inflightFetchRequests = new ConcurrentDictionary<string, object>();
 
-        readonly TWebApi webApi;
+        readonly IEnumerable<TWebApi> webApis;
         readonly ICache cache;
         readonly IPolicyRegistry<string>? policyRegistry;
 
-        public WebApi(TWebApi webApi, ICache cache, IServiceProvider serviceProvider)
+        public WebApi(IEnumerable<TWebApi> webApis, ICache cache, IServiceProvider serviceProvider)
         {
-            this.webApi = webApi;
+            this.webApis = webApis;
             this.cache = cache;
             this.cache.Enabled = true;
             if(serviceProvider.IsRegistered<IPolicyRegistry<string>>())
                 this.policyRegistry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
         }
 
-        public IObservable<TResult> Execute<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
+        TWebApi GetWebApi(Priority priority)
+        {
+            switch (priority)
+            {
+                case Priority.Speculative:
+                    return this.webApis.ElementAt(0);
+                case Priority.Background:
+                    return this.webApis.ElementAt(1);
+                case Priority.UserInitiated:
+                    return this.webApis.ElementAt(2);
+                case Priority.Explicit:
+                    throw new NotImplementedException();
+                default:
+                    return this.webApis.ElementAt(2);
+            }
+        }
+
+        public IObservable<TResult> Execute<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod, Priority priority = Priority.UserInitiated)
         {
             string? cacheKey = null;
             MethodCacheAttributes? cacheAttributes = null;
             var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
             var executeApiMethodAsObservableTask = (policy != null
-                    ? policy.ExecuteAsync(async () => await executeApiMethod.Compile()(this.webApi))
-                    : executeApiMethod.Compile()(this.webApi)).ToObservable();
+                    ? policy.ExecuteAsync(async () => await executeApiMethod.Compile()(this.GetWebApi(priority)))
+                    : executeApiMethod.Compile()(this.GetWebApi(priority))).ToObservable();
             CacheMode? cacheMode = null;
 
             if (this.IsMethodCacheable(executeApiMethod))
@@ -111,7 +129,7 @@ namespace Shiny.WebApi
             }
         }
 
-        public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod)
+        public async Task<TResult> ExecuteAsync<TResult>(Expression<Func<TWebApi, Task<TResult>>> executeApiMethod, Priority priority = Priority.UserInitiated)
         {
             string? cacheKey = null;
             TResult result = default;
@@ -127,7 +145,7 @@ namespace Shiny.WebApi
             if (result == null || cacheAttributes?.CacheAttribute.Mode == CacheMode.GetAndFetch)
             {
                 var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
-                var executeApiMethodTask = executeApiMethod.Compile()(this.webApi);
+                var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
 
                 try
                 {
@@ -147,10 +165,10 @@ namespace Shiny.WebApi
             return result;
         }
 
-        public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod)
+        public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod, Priority priority = Priority.UserInitiated)
         {
             var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
-            var executeApiMethodTask = executeApiMethod.Compile()(this.webApi);
+            var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
 
             try
             {

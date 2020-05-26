@@ -10,8 +10,6 @@ namespace Shiny.WebApi.Caching
 
         }
 
-        public string? PropertyName { get; }
-
         /// <summary>
         /// If you use non primitive type (like your ModelClass object) as Cache Primary key you should provide 
         /// property name of primitive primary Id, otherwise ToString() method will be used.
@@ -21,5 +19,7 @@ namespace Shiny.WebApi.Caching
         {
             this.PropertyName = propertyName;
         }
+
+        public string? PropertyName { get; }
     }
 }
