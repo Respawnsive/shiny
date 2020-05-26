@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reactive;
@@ -16,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Polly;
 using Polly.Registry;
 using Shiny.Caching;
+using Shiny.Net;
 using Shiny.WebApi.Caching;
 using Shiny.WebApi.Lazying;
 using Shiny.WebApi.Policing;
@@ -29,14 +31,16 @@ namespace Shiny.WebApi
 
         readonly IEnumerable<ILazyDependency<TWebApi>> webApis;
         readonly ICache cache;
+        readonly IConnectivity connectivity;
         readonly IPolicyRegistry<string>? policyRegistry;
 
-        public WebApi(IEnumerable<ILazyDependency<TWebApi>> webApis, ICache cache, IServiceProvider serviceProvider)
+        public WebApi(IEnumerable<ILazyDependency<TWebApi>> webApis, ICache cache, IConnectivity connectivity, IServiceProvider serviceProvider)
         {
             this.webApis = webApis;
             this.cache = cache;
             this.cache.Enabled = true;
-            if(serviceProvider.IsRegistered<IPolicyRegistry<string>>())
+            this.connectivity = connectivity;
+            if (serviceProvider.IsRegistered<IPolicyRegistry<string>>())
                 this.policyRegistry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
         }
 
@@ -145,11 +149,14 @@ namespace Shiny.WebApi
 
             if (result == null || cacheAttributes?.CacheAttribute.Mode == CacheMode.GetAndFetch)
             {
-                var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
-                var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
-
                 try
                 {
+                    if(!this.connectivity.IsInternetAvailable())
+                        throw new IOException();
+
+                    var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
+                    var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
+
                     result = policy != null
                         ? await policy.ExecuteAsync(async () => await executeApiMethodTask)
                         : await executeApiMethodTask;
@@ -168,11 +175,14 @@ namespace Shiny.WebApi
 
         public Task ExecuteAsync(Expression<Func<TWebApi, Task>> executeApiMethod, Priority priority = Priority.UserInitiated)
         {
-            var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
-            var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
-
             try
             {
+                if (!this.connectivity.IsInternetAvailable())
+                    throw new IOException();
+
+                var policy = this.GetMethodPolicy(executeApiMethod.Body as MethodCallExpression);
+                var executeApiMethodTask = executeApiMethod.Compile()(this.GetWebApi(priority));
+
                 return policy != null
                         ? policy.ExecuteAsync(async () => await executeApiMethodTask)
                         : executeApiMethodTask;
