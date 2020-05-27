@@ -7,6 +7,7 @@ using HttpTracer;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;
 using Refit;
+using Shiny.WebApi.Authenticating;
 
 namespace Shiny.WebApi
 {
@@ -29,5 +30,6 @@ namespace Shiny.WebApi
         public string[] PolicyRegistryKeys { get; }
         public Func<IServiceProvider, RefitSettings> RefitSettingsFactory { get; internal set; }
         public Func<IHttpClientBuilder, IHttpClientBuilder>? HttpClientBuilder { get; internal set; }
+        public Func<IServiceProvider, DelegatingHandler>? AuthenticationHandlerFactory { get; internal set; }
     }
 }

@@ -56,6 +56,9 @@ namespace Shiny.WebApi
 
                 foreach (var policyRegistryKey in this.webApiOptions.PolicyRegistryKeys)
                     builder.AddPolicyHandlerFromRegistry(policyRegistryKey);
+
+                if(this.webApiOptions.AuthenticationHandlerFactory != null)
+                    builder.AddHttpMessageHandler(provider => this.webApiOptions.AuthenticationHandlerFactory(provider));
             }
 
             services.AddSingleton(typeof(IWebApi<>).MakeGenericType(this.webApiOptions.WebApiType), typeof(WebApi<>).MakeGenericType(this.webApiOptions.WebApiType));

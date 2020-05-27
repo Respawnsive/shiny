@@ -1,6 +1,10 @@
 ﻿using System;
+using System.Linq.Expressions;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Refit;
+using Shiny.WebApi.Authenticating;
 
 namespace Shiny.WebApi
 {
@@ -23,6 +27,30 @@ namespace Shiny.WebApi
         public WebApiOptionsBuilder WithRefitSettings(Func<IServiceProvider, RefitSettings> refitSettingsFactory)
         {
             this.WebApiOptions.RefitSettingsFactory = refitSettingsFactory;
+
+            return this;
+        }
+
+        //public WebApiOptionsBuilder WithAuthenticationHandler<TAuthenticationHandler>() where TAuthenticationHandler : AuthenticationHandlerBase
+        //{
+        //    return this;
+        //}
+
+        public WebApiOptionsBuilder WithAuthenticationHandler<TSettingsService>(Expression<Func<TSettingsService, string?>> tokenProperty, Func<HttpRequestMessage, Task<string?>> refreshToken)
+        {
+            this.WebApiOptions.AuthenticationHandlerFactory = provider =>
+                new AuthenticationHandler<TSettingsService>(
+                    provider.GetRequiredService<TSettingsService>(), tokenProperty, refreshToken);
+
+            return this;
+        }
+
+        public WebApiOptionsBuilder WithAuthenticationHandler<TSettingsService, TTokenService>(Expression<Func<TSettingsService, string?>> tokenProperty, Expression<Func<TTokenService, HttpRequestMessage, Task<string?>>> refreshTokenMethod)
+        {
+            this.WebApiOptions.AuthenticationHandlerFactory = provider =>
+                new AuthenticationHandler<TSettingsService, TTokenService>(
+                    provider.GetRequiredService<TSettingsService>(), tokenProperty,
+                    provider.GetRequiredService<TTokenService>(), refreshTokenMethod);
 
             return this;
         }
