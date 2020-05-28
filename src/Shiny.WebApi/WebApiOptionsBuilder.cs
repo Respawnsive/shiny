@@ -31,10 +31,20 @@ namespace Shiny.WebApi
             return this;
         }
 
-        //public WebApiOptionsBuilder WithAuthenticationHandler<TAuthenticationHandler>() where TAuthenticationHandler : AuthenticationHandlerBase
-        //{
-        //    return this;
-        //}
+        public WebApiOptionsBuilder WithAuthenticationHandler<TAuthenticationHandler>(Func<IServiceProvider, TAuthenticationHandler> authenticationHandler) where TAuthenticationHandler : AuthenticationHandlerBase
+        {
+            this.WebApiOptions.AuthenticationHandlerFactory = authenticationHandler;
+
+            return this;
+        }
+
+        public WebApiOptionsBuilder WithAuthenticationHandler(Func<HttpRequestMessage, Task<string?>> refreshToken)
+        {
+            this.WebApiOptions.AuthenticationHandlerFactory = provider =>
+                new AuthenticationHandler(refreshToken);
+
+            return this;
+        }
 
         public WebApiOptionsBuilder WithAuthenticationHandler<TSettingsService>(Expression<Func<TSettingsService, string?>> tokenProperty, Func<HttpRequestMessage, Task<string?>> refreshToken)
         {

@@ -6,6 +6,22 @@ using System.Threading.Tasks;
 
 namespace Shiny.WebApi.Authenticating
 {
+    public class AuthenticationHandler : AuthenticationHandlerBase
+    {
+        readonly Func<HttpRequestMessage, Task<string?>> refreshToken;
+
+        public AuthenticationHandler(Func<HttpRequestMessage, Task<string?>> refreshToken)
+        {
+            this.refreshToken = refreshToken ?? throw new ArgumentNullException(nameof(refreshToken));
+        }
+
+        protected override string? GetToken() => null;
+
+        protected override void SetToken(string? token) { }
+
+        protected override Task<string?> RefreshTokenAsync(HttpRequestMessage request) => this.refreshToken(request);
+    }
+
     public class AuthenticationHandler<TSettingsService> : AuthenticationHandlerBase
     {
         readonly TSettingsService settingsService;
