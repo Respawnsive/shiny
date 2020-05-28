@@ -27,19 +27,22 @@ namespace Shiny.WebApi
     public class WebApi<TWebApi> : IWebApi<TWebApi>
     {
         readonly Dictionary<MethodCacheDetails, MethodCacheAttributes> cacheableMethodsSet = new Dictionary<MethodCacheDetails, MethodCacheAttributes>();
-        private readonly ConcurrentDictionary<string, object> _inflightFetchRequests = new ConcurrentDictionary<string, object>();
+        readonly ConcurrentDictionary<string, object> inflightFetchRequests = new ConcurrentDictionary<string, object>();
 
         readonly IEnumerable<ILazyDependency<TWebApi>> webApis;
-        readonly ICache cache;
         readonly IConnectivity connectivity;
+        readonly ICache? cache;
         readonly IPolicyRegistry<string>? policyRegistry;
 
-        public WebApi(IEnumerable<ILazyDependency<TWebApi>> webApis, ICache cache, IConnectivity connectivity, IServiceProvider serviceProvider)
+        public WebApi(IEnumerable<ILazyDependency<TWebApi>> webApis, IConnectivity connectivity, IServiceProvider serviceProvider)
         {
             this.webApis = webApis;
-            this.cache = cache;
-            this.cache.Enabled = true;
             this.connectivity = connectivity;
+            if (serviceProvider.IsRegistered<ICache>())
+            {
+                this.cache = serviceProvider.GetRequiredService<ICache>();
+                this.cache.Enabled = true;
+            }
             if (serviceProvider.IsRegistered<IPolicyRegistry<string>>())
                 this.policyRegistry = serviceProvider.GetRequiredService<IPolicyRegistry<string>>();
         }
@@ -90,11 +93,11 @@ namespace Shiny.WebApi
 
                     var result = Observable.Defer(() => executeApiMethodAsObservableTask)
                         .Do(x => this.cache.Set(cacheKey, x, cacheAttributes.CacheAttribute.LifeSpan))
-                        .Finally(() => this._inflightFetchRequests.TryRemove(prefixedKey, out var _))
+                        .Finally(() => this.inflightFetchRequests.TryRemove(prefixedKey, out var _))
                         .Multicast(new AsyncSubject<TResult>())
                         .RefCount();
 
-                    return (IObservable<TResult>)this._inflightFetchRequests.GetOrAdd(prefixedKey, result);
+                    return (IObservable<TResult>)this.inflightFetchRequests.GetOrAdd(prefixedKey, result);
                 });
             }
             else
